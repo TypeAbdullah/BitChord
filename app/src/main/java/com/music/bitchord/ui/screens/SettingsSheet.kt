@@ -26,8 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Notes
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -717,7 +715,7 @@ fun SettingsScreen(
             footer = stringResource(R.string.miscellaneous_footer),
         ) {
             SettingsRow(
-                icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                icon = Icons.Rounded.PlaylistPlay,
                 title = stringResource(R.string.play_next_on_swipe),
                 subtitle = if (swipeToPlayNext) {
                     "Swiping a song plays it next"
@@ -772,7 +770,7 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
-                icon = Icons.AutoMirrored.Rounded.VolumeOff,
+                icon = Icons.Rounded.VolumeOff,
                 title = stringResource(R.string.hide_volume_bar),
                 subtitle = stringResource(R.string.hide_volume_bar_subtitle),
                 trailing = {
