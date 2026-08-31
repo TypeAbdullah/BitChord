@@ -500,9 +500,17 @@ object SpotifyRepository {
     }
 
     suspend fun isPremium(): Boolean {
-        val userJson = apiGet("me") ?: return false
-        val product = userJson["product"]?.jsonPrimitive?.contentOrNull
-        return product.equals("premium", ignoreCase = true)
+        val userJson = apiGet("me") ?: return true
+        val product = userJson["product"]?.jsonPrimitive?.contentOrNull?.lowercase() ?: return true
+        if (product == "free" || product == "open") {
+            return false
+        }
+        return product.contains("premium") ||
+            product.contains("family") ||
+            product.contains("duo") ||
+            product.contains("student") ||
+            product.contains("unlimited") ||
+            product.isNotBlank()
     }
 
     suspend fun library(): Result<LibraryPage> = call("spotify:library") {
