@@ -221,6 +221,22 @@ object SourceResolver {
     }
 
     /**
+     * Finds the best stream across active sources for a Spotify track target.
+     */
+    suspend fun resolveForSpotify(target: TrackMatcher.Target): SourceStream? {
+        if (target.title.isBlank()) return null
+        val active = SourceRegistry.active()
+        val request = requestForNow()
+        val (source, stream) = bestAcross(active, target, request) ?: return null
+        TrackLog.d(
+            TAG,
+            "spotify stream resolved: '${target.title}' served by ${source.displayName}" +
+                " at ${stream.format.summary}" + if (stream.belowRequest) " (below request)" else "",
+        )
+        return stream
+    }
+
+    /**
      * The copy of [target] held by a source quick enough to ask about *before*
      * the track is played — or null when no such source is enabled, or none of
      * them has it.

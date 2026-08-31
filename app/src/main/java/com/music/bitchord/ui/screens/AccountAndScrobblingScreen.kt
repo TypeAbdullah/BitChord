@@ -38,6 +38,7 @@ fun AccountAndScrobblingScreen(
     onOpenListenBrainzLogin: () -> Unit,
     onOpenLastfmLogin: () -> Unit,
     onOpenDiscord: () -> Unit,
+    onOpenSpotifyCanvasAuth: () -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -54,6 +55,10 @@ fun AccountAndScrobblingScreen(
     val discordToken by AppSettings.discordToken.collectAsStateWithLifecycle()
     val discordUsername by AppSettings.discordUsername.collectAsStateWithLifecycle()
     val discordRpcEnabled by AppSettings.discordRpcEnabled.collectAsStateWithLifecycle()
+    val spotifySpdc by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
+    val isSpotifyConnected by com.music.bitchord.playback.spotify.LibrespotManager.isConnected.collectAsStateWithLifecycle()
+    val isSpotifyPremium by com.music.bitchord.playback.spotify.LibrespotManager.isPremium.collectAsStateWithLifecycle()
+    val spotifyDeviceName by AppSettings.spotifyDeviceName.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier
@@ -74,6 +79,22 @@ fun AccountAndScrobblingScreen(
             SettingsGroup {
                 DestructiveRow(label = "Sign out", onClick = onSignOut)
             }
+        }
+
+        SettingsGroup(
+            header = "Spotify Integration",
+            footer = "Connected via SP_DC cookie token for Canvas video artwork and Spotify Connect device playback.",
+        ) {
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = "Spotify Account & Connect",
+                subtitle = when {
+                    spotifySpdc.isBlank() -> "Not connected (Tap to enter SP_DC token)"
+                    isSpotifyConnected -> "$spotifyDeviceName · " + if (isSpotifyPremium) "Premium Active" else "Free Account"
+                    else -> "$spotifyDeviceName · Session active"
+                },
+                onClick = onOpenSpotifyCanvasAuth,
+            )
         }
 
         SettingsGroup(

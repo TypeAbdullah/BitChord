@@ -36,8 +36,10 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Download
+import com.music.bitchord.data.settings.HomeProvider
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Fullscreen
@@ -176,6 +178,11 @@ fun SettingsScreen(
     val swipeToPlayNext by AppSettings.swipeToPlayNext.collectAsStateWithLifecycle()
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val convertVideoToAudio by AppSettings.convertVideoToAudio.collectAsStateWithLifecycle()
+    val homeProvider by AppSettings.homeProvider.collectAsStateWithLifecycle()
+    val spotifySpdc by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
+    val isSpotifyConnected by com.music.bitchord.playback.spotify.LibrespotManager.isConnected.collectAsStateWithLifecycle()
+    val isSpotifyPremium by com.music.bitchord.playback.spotify.LibrespotManager.isPremium.collectAsStateWithLifecycle()
+    val spotifyDeviceName by AppSettings.spotifyDeviceName.collectAsStateWithLifecycle()
 
     // Whether the module index URL is baked into this build.
     val losslessConfigured = BuildConfig.MODULE_INDEX_URL.trim().isNotEmpty()
@@ -269,6 +276,35 @@ fun SettingsScreen(
                     ?: if (signedIn) "Signed in" else "Not signed in",
                 onClick = onAccountScrobbling,
             )
+        }
+
+        SettingsGroup(header = "Content & Feed") {
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = "Home & Search Provider",
+                subtitle = if (homeProvider == HomeProvider.SPOTIFY) {
+                    if (isSpotifyConnected) {
+                        "Spotify (Active" + if (isSpotifyPremium) " · Premium Device)" else " · Free)"
+                    } else if (spotifySpdc.isNotBlank()) "Spotify (Session active)"
+                    else "Spotify (SP_DC token not set)"
+                } else {
+                    "YouTube Music (Active)"
+                },
+                value = homeProvider.label,
+                onClick = {
+                    val next = if (homeProvider == HomeProvider.SPOTIFY) HomeProvider.YOUTUBE else HomeProvider.SPOTIFY
+                    AppSettings.setHomeProvider(next)
+                },
+            )
+            if (homeProvider == HomeProvider.SPOTIFY || spotifySpdc.isNotBlank()) {
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.Devices,
+                    title = "Spotify Connect Device",
+                    subtitle = "$spotifyDeviceName · ${if (isSpotifyPremium) "Premium Active" else "Tap to configure SP_DC & Device"}",
+                    onClick = onSpotifyCanvasAuth,
+                )
+            }
         }
 
         // The row that used to sit at the top of this group was called

@@ -68,6 +68,11 @@ enum class ThemeMode(val label: String) {
     SYSTEM("System"), LIGHT("Light"), DARK("Dark")
 }
 
+enum class HomeProvider(val label: String) {
+    YOUTUBE("YouTube Music"),
+    SPOTIFY("Spotify"),
+}
+
 /**
  * App settings, backed by SharedPreferences and exposed as flows.
  *
@@ -316,6 +321,10 @@ object AppSettings {
     val listenBrainzEnabled = MutableStateFlow(false)
     val listenBrainzToken = MutableStateFlow("")
     val spotifySpdcToken = MutableStateFlow("")
+    val homeProvider = MutableStateFlow(HomeProvider.YOUTUBE)
+    val spotifyDeviceName = MutableStateFlow("BitChord")
+    val spotifyCanvasFromCookie = MutableStateFlow(true)
+    val spotifyCanvasFallback = MutableStateFlow(true)
 
     // ── Discord Rich Presence ───────────────────────────────────────────
 
@@ -482,6 +491,12 @@ object AppSettings {
         listenBrainzEnabled.value = prefs.getBoolean(KEY_LISTENBRAINZ_ENABLED, false)
         listenBrainzToken.value = prefs.getString(KEY_LISTENBRAINZ_TOKEN, "").orEmpty()
         spotifySpdcToken.value = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, "").orEmpty()
+        homeProvider.value = runCatching {
+            HomeProvider.valueOf(prefs.getString(KEY_HOME_PROVIDER, null) ?: "YOUTUBE")
+        }.getOrDefault(HomeProvider.YOUTUBE)
+        spotifyDeviceName.value = prefs.getString(KEY_SPOTIFY_DEVICE_NAME, "BitChord").orEmpty().ifBlank { "BitChord" }
+        spotifyCanvasFromCookie.value = prefs.getBoolean(KEY_SPOTIFY_CANVAS_COOKIE, true)
+        spotifyCanvasFallback.value = prefs.getBoolean(KEY_SPOTIFY_CANVAS_FALLBACK, true)
         replayGenres.value = prefs.getBoolean(KEY_REPLAY_GENRES, true)
         pinnedPlaylists.value = readPinnedPlaylists()
         discordToken.value = authStore.discordToken.orEmpty()
@@ -807,6 +822,28 @@ object AppSettings {
     fun setSpotifySpdcToken(value: String) {
         spotifySpdcToken.value = value
         prefs.edit().putString(KEY_SPOTIFY_SPDC_TOKEN, value).apply()
+        com.music.bitchord.playback.spotify.LibrespotManager.checkSession()
+    }
+
+    fun setHomeProvider(value: HomeProvider) {
+        homeProvider.value = value
+        prefs.edit().putString(KEY_HOME_PROVIDER, value.name).apply()
+    }
+
+    fun setSpotifyDeviceName(value: String) {
+        val name = value.trim().ifBlank { "BitChord" }
+        spotifyDeviceName.value = name
+        prefs.edit().putString(KEY_SPOTIFY_DEVICE_NAME, name).apply()
+    }
+
+    fun setSpotifyCanvasFromCookie(value: Boolean) {
+        spotifyCanvasFromCookie.value = value
+        prefs.edit().putBoolean(KEY_SPOTIFY_CANVAS_COOKIE, value).apply()
+    }
+
+    fun setSpotifyCanvasFallback(value: Boolean) {
+        spotifyCanvasFallback.value = value
+        prefs.edit().putBoolean(KEY_SPOTIFY_CANVAS_FALLBACK, value).apply()
     }
 
     fun setLastfmScrobbleEnabled(value: Boolean) {
@@ -1089,6 +1126,10 @@ object AppSettings {
     private const val KEY_LISTENBRAINZ_ENABLED = "listenbrainz_enabled"
     private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
     private const val KEY_SPOTIFY_SPDC_TOKEN = "spotify_spdc_token"
+    private const val KEY_HOME_PROVIDER = "home_provider"
+    private const val KEY_SPOTIFY_DEVICE_NAME = "spotify_device_name"
+    private const val KEY_SPOTIFY_CANVAS_COOKIE = "spotify_canvas_cookie"
+    private const val KEY_SPOTIFY_CANVAS_FALLBACK = "spotify_canvas_fallback"
 
     private const val KEY_DISCORD_USERNAME = "discord_username"
     private const val KEY_DISCORD_NAME = "discord_name"

@@ -759,6 +759,29 @@ class PlaybackService : MediaSessionService() {
                     .setHttpRequestHeaders(serving.headers)
                     .build()
             }
+            if (videoId.startsWith("spotify:track:") || videoId.startsWith("spotify:")) {
+                val target = SourceResolver.targetIn(dataSpec.uri)
+                val spotifyDirectStream = runBlocking(about) {
+                    com.music.bitchord.playback.spotify.LibrespotManager.resolveStream(videoId)
+                }
+                if (spotifyDirectStream != null) {
+                    StreamChoice.remember(videoId, SourceStream(spotifyDirectStream), substituted = false)
+                    return@Factory dataSpec.buildUpon()
+                        .setUri(Uri.parse(spotifyDirectStream))
+                        .build()
+                }
+                val matchedStream = runBlocking(about) {
+                    SourceResolver.resolveForSpotify(target)
+                }
+                if (matchedStream != null) {
+                    NerdStats.onSourceStream(videoId, matchedStream.format)
+                    StreamChoice.remember(videoId, matchedStream, substituted = true)
+                    return@Factory dataSpec.buildUpon()
+                        .setUri(Uri.parse(matchedStream.url))
+                        .setHttpRequestHeaders(matchedStream.headers)
+                        .build()
+                }
+            }
             // A track queued from YouTube may be held by a source the user
             // ranked above it — see [SourceResolver.substituteForYouTube] and
             // [raceYouTubeOrModule]. Only worth the extra lookup when

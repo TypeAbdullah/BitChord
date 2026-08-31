@@ -8,6 +8,8 @@ import com.music.bitchord.data.AppUpdateChecker
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.LikeState
 import com.music.bitchord.data.YtMusicRepository
+import com.music.bitchord.data.spotify.SpotifyRepository
+import com.music.bitchord.data.settings.HomeProvider
 import com.music.bitchord.data.lyrics.EmbeddedLyrics
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsRepository
@@ -303,10 +305,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * registered, and people tap again.
      */
     fun setLike(videoId: String, status: LikeStatus) {
-        if (!requireSignIn()) return
+        if (!requireSignIn() && !videoId.startsWith("spotify:")) return
         val previous = likeStatusOf(videoId)
         if (previous == status) return
         LikeState.set(videoId, status)
+        if (videoId.startsWith("spotify:track:") || videoId.startsWith("spotify:")) {
+            viewModelScope.launch {
+                SpotifyRepository.rate(videoId, status).fold(
+                    onSuccess = {
+                        libraryStale = true
+                        if (status != LikeStatus.LIKE) dropFromLikedLists(videoId)
+                    },
+                    onFailure = {
+                        LikeState.set(videoId, previous)
+                    },
+                )
+            }
+            return
+        }
         viewModelScope.launch {
             YtMusicRepository.rate(videoId, status).fold(
                 onSuccess = {
@@ -411,6 +427,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * control on it to have been tapped, so this is a no-op rather than a guess.
      */
     fun toggleLibrary(browseId: String) {
+        if (browseId.startsWith("spotify:")) {
+            val current = _detailStack.value.firstOrNull { it.browseId == browseId }?.library ?: return
+            val target = !current.saved
+            setSavedOnPage(browseId, target)
+            viewModelScope.launch {
+                if (SpotifyRepository.setSaved(browseId, target).isSuccess) {
+                    libraryStale = true
+                } else {
+                    setSavedOnPage(browseId, current.saved)
+                }
+            }
+            return
+        }
         if (!requireSignIn()) return
         val current = _detailStack.value.firstOrNull { it.browseId == browseId }?.library ?: return
         val target = !current.saved
@@ -903,6 +932,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             PlaybackTracker.registeredPlays.drop(1).collect { homeStale = true }
         }
         viewModelScope.launch {
+            AppSettings.homeProvider.drop(1).collect {
+                searchCache.evictAll()
+                _home.value = UiState.Loading
+                _explore.value = UiState.Loading
+                fetchHome()
+                fetchExplore()
+                loadAccount()
+                if (_signedIn.value || AppSettings.spotifySpdcToken.value.isNotBlank()) {
+                    loadLibrary()
+                }
+            }
+        }
+        viewModelScope.launch {
             // A leftover APK only means "Install Now" for the session that
             // downloaded it — see AppUpdateChecker.clearCache.
             AppUpdateChecker.clearCache(getApplication())
@@ -930,7 +972,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun loadAccount() {
         viewModelScope.launch {
-            _account.value = YtMusicRepository.account().getOrNull()
+            val isSpotify = AppSettings.homeProvider.value == HomeProvider.SPOTIFY
+            _account.value = if (isSpotify) {
+                SpotifyRepository.account().getOrNull()
+            } else {
+                YtMusicRepository.account().getOrNull()
+            }
         }
     }
 
@@ -970,7 +1017,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun fetchExplore() {
-        _explore.value = YtMusicRepository.explore().fold(
+        val isSpotify = AppSettings.homeProvider.value == HomeProvider.SPOTIFY
+        val result = if (isSpotify) SpotifyRepository.explore() else YtMusicRepository.explore()
+        _explore.value = result.fold(
             onSuccess = { shelves ->
                 if (shelves.isEmpty()) UiState.Error("Nothing to explore right now")
                 else UiState.Success(shelves)
@@ -992,11 +1041,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun fetchHome() {
         homeContinuation = null
         homeSeenTitles.clear()
-        _home.value = YtMusicRepository.home().fold(
+        val isSpotify = AppSettings.homeProvider.value == HomeProvider.SPOTIFY
+        val result = if (isSpotify) SpotifyRepository.home() else YtMusicRepository.home()
+        val emptyMsg = if (isSpotify) "No results from Spotify" else "No results from YouTube Music"
+        _home.value = result.fold(
             onSuccess = { feed ->
                 homeContinuation = feed.continuation
                 val shelves = feed.shelves.filter { homeSeenTitles.add(it.title.lowercase(Locale.ROOT)) }
-                if (shelves.isEmpty()) UiState.Error("No results from YouTube Music")
+                if (shelves.isEmpty()) UiState.Error(emptyMsg)
                 else UiState.Success(shelves)
             },
             onFailure = { UiState.Error(it.friendly()) },
@@ -1013,7 +1065,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_homeLoadingMore.value) return
         _homeLoadingMore.value = true
         viewModelScope.launch {
-            YtMusicRepository.moreHome(token).onSuccess { feed ->
+            val isSpotify = AppSettings.homeProvider.value == HomeProvider.SPOTIFY
+            val result = if (isSpotify) SpotifyRepository.moreHome(token) else YtMusicRepository.moreHome(token)
+            result.onSuccess { feed ->
                 val added = feed.shelves.filter { homeSeenTitles.add(it.title.lowercase(Locale.ROOT)) }
                 // A page with nothing new signals the feed has looped back on
                 // itself rather than run dry with a token still attached —
@@ -1029,13 +1083,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun loadLibrary() {
-        if (!_signedIn.value) return
+        if (!_signedIn.value && AppSettings.spotifySpdcToken.value.isBlank()) return
         _library.value = UiState.Loading
         viewModelScope.launch { fetchLibrary() }
     }
 
     private suspend fun fetchLibrary() {
-        _library.value = YtMusicRepository.library().fold(
+        val isSpotify = AppSettings.homeProvider.value == HomeProvider.SPOTIFY
+        val result = if (isSpotify) SpotifyRepository.library() else YtMusicRepository.library()
+        _library.value = result.fold(
             onSuccess = { page ->
                 if (page.isEmpty) UiState.Error("Nothing in your library yet")
                 else UiState.Success(page)
@@ -1226,7 +1282,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // see [SourceResolver.substituteForYouTube] — which upgrades
                 // the ones it holds without any of them having to be a
                 // separate row to pick between.
-                val result = YtMusicRepository.search(request.query, request.filter)
+                val isSpotify = AppSettings.homeProvider.value == HomeProvider.SPOTIFY
+                val result = if (isSpotify) {
+                    SpotifyRepository.search(request.query, request.filter)
+                } else {
+                    YtMusicRepository.search(request.query, request.filter)
+                }
                 // A search that has been superseded shouldn't land on screen,
                 // whether it succeeded or failed.
                 if (request.requestId != newestRequestId.get()) return@collectLatest
@@ -1268,8 +1329,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .debounce(SUGGEST_DEBOUNCE_MS)
             .collectLatest { input ->
                 if (!stillWanted(input)) return@collectLatest
-                val fetched = YtMusicRepository.searchSuggestions(input).getOrNull()
-                    ?: return@collectLatest
+                val isSpotify = AppSettings.homeProvider.value == HomeProvider.SPOTIFY
+                val fetched = if (isSpotify) {
+                    SpotifyRepository.searchSuggestions(input).getOrNull()
+                } else {
+                    YtMusicRepository.searchSuggestions(input).getOrNull()
+                } ?: return@collectLatest
                 // Asked again on the way back; the field is live throughout.
                 if (!stillWanted(input)) return@collectLatest
                 _suggestions.value = listOf(input) +
@@ -1484,6 +1549,44 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         val songs = LocalMediaRepository.getLocalMusic(context)
                         if (songs.isEmpty()) UiState.Error("No audio files found on device")
                         else UiState.Success(songs)
+                    }
+                }
+                browseId.startsWith("spotify:") || (AppSettings.homeProvider.value == HomeProvider.SPOTIFY && !browseId.startsWith("local:")) -> {
+                    if (resolved == BrowseType.ARTIST) {
+                        SpotifyRepository.artistPage(browseId).fold(
+                            onSuccess = { page ->
+                                sections = page.sections
+                                artwork = page.thumbnailUrl
+                                name = page.name
+                                description = page.description
+                                subscriberCountText = page.subscriberCountText
+                                monthlyListenerCount = page.monthlyListenerCount
+                                if (page.songs.isEmpty()) {
+                                    UiState.Error(NO_TRACKS)
+                                } else {
+                                    UiState.Success(page.songs.withArtwork(thumbnailUrl))
+                                }
+                            },
+                            onFailure = { UiState.Error(it.friendly()) },
+                        )
+                    } else {
+                        SpotifyRepository.browseSongs(browseId).fold(
+                            onSuccess = { page ->
+                                page.header?.let { header ->
+                                    if (title.isBlank()) name = header.title
+                                    if (subtitle.isBlank()) credit = header.subtitle
+                                    if (thumbnailUrl == null) artwork = header.thumbnailUrl
+                                }
+                                description = page.description
+                                if (page.songs.isEmpty()) {
+                                    UiState.Error(NO_TRACKS)
+                                } else {
+                                    library = page.library
+                                    UiState.Success(page.songs.withArtwork(thumbnailUrl))
+                                }
+                            },
+                            onFailure = { UiState.Error(it.friendly()) },
+                        )
                     }
                 }
                 resolved == BrowseType.ARTIST -> {

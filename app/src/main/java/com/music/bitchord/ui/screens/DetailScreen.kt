@@ -88,6 +88,7 @@ import com.music.bitchord.data.model.ShelfItem
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.ArtworkWash
 import com.music.bitchord.ui.components.DownloadedBadge
@@ -113,6 +114,13 @@ private const val SONGS_PER_COLUMN = 4
 
 /** The artist photo, very slightly taller than it is wide. */
 private const val ARTIST_PHOTO_RATIO = 0.95f
+
+enum class TrackSort(val label: String) {
+    DEFAULT("Default"),
+    TITLE("Title"),
+    ARTIST("Artist"),
+    DURATION("Duration"),
+}
 
 /** A release's sleeve, given a little more height than the artist photo. */
 private const val SLEEVE_RATIO = 0.92f
@@ -225,10 +233,21 @@ fun DetailScreen(
     // that pops the page, so it is the one that answers while it's enabled.
     BackHandler(enabled = searching) { closeSearch() }
 
+    var trackSort by rememberSaveable(page.browseId) { mutableStateOf(TrackSort.DEFAULT) }
+
+    val sortedSongs = remember(songs, trackSort) {
+        when (trackSort) {
+            TrackSort.DEFAULT -> songs
+            TrackSort.TITLE -> songs.sortedBy { it.title.lowercase(Locale.ROOT) }
+            TrackSort.ARTIST -> songs.sortedBy { it.artist.lowercase(Locale.ROOT) }
+            TrackSort.DURATION -> songs.sortedByDescending { it.durationMillis() }
+        }
+    }
+
     // Each surviving row still knows where it sat in the full running order, so
     // an album's track numbers stay the album's rather than becoming positions
     // in the filtered list.
-    val matches = remember(songs, query) { songs.matching(query) }
+    val matches = remember(sortedSongs, query) { sortedSongs.matching(query) }
     // What a tap plays: the list as it is being read. Playing the whole release
     // from a filtered row would start a queue the user cannot see.
     val queue = remember(matches) { matches.map { it.value } }
@@ -360,6 +379,16 @@ fun DetailScreen(
                         onFocused = { focusSearch = false },
                         palette = palette,
                         type = page.type,
+                    )
+                }
+            }
+
+            if (songs.isNotEmpty() && !isArtist && (page.type == BrowseType.PLAYLIST || searching)) {
+                item(key = "sort-bar") {
+                    PlaylistSortBar(
+                        selected = trackSort,
+                        onSelect = { trackSort = it },
+                        palette = palette,
                     )
                 }
             }
@@ -698,6 +727,39 @@ private fun ReleaseHeader(
  * Material text field beside them would read as a different app's furniture.
  */
 @Composable
+private fun PlaylistSortBar(
+    selected: TrackSort,
+    onSelect: (TrackSort) -> Unit,
+    palette: ArtworkPalette,
+    modifier: Modifier = Modifier,
+) {
+    LazyRow(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items(TrackSort.entries) { sort ->
+            val isSelected = sort == selected
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (isSelected) palette.accent.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.08f))
+                    .clickable { onSelect(sort) }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = sort.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isSelected) palette.accent else palette.onBackground,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                )
+            }
+        }
+    }
+}
 private fun DetailSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
