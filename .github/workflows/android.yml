@@ -24,7 +24,7 @@ jobs:
         echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
         
         if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '\r\n ' | base64 -d > bitchord-release.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > bitchord-release.jks 2>/dev/null || echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '\r\n ' | base64 -d > bitchord-release.jks 2>/dev/null
           if [ -s bitchord-release.jks ]; then
             echo "storeFile=bitchord-release.jks" > keystore.properties
             echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> keystore.properties
