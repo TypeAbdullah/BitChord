@@ -400,7 +400,7 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
-                icon = Icons.AutoMirrored.Rounded.VolumeOff,
+                icon = Icons.Rounded.VolumeOff,
                 title = stringResource(R.string.skip_silence),
                 subtitle = stringResource(R.string.skip_silence_subtitle),
                 trailing = {
