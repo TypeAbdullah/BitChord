@@ -1,10 +1,6 @@
 package com.music.bitchord.ui.screens
 
-import android.annotation.SuppressLint
-import android.graphics.Bitmap
-import android.webkit.CookieManager
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -41,11 +38,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.music.bitchord.auth.SpotifyLoginScreen
 import com.music.bitchord.data.settings.AppSettings
+
+private enum class LoginTarget {
+    MAIN_ACCOUNT,
+    CANVAS_ACCOUNT,
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,21 +65,52 @@ fun SpotifyCanvasAuthScreen(
 
     var loginTarget by remember { mutableStateOf<LoginTarget?>(null) }
 
+    // Full-screen Hardware Accelerated Spotify Web Login (identical to YouTube / Discord login screens)
     if (loginTarget != null) {
-        SpotifyLoginDialog(
-            target = loginTarget!!,
-            onDismiss = { loginTarget = null },
-            onSuccess = { capturedSpdc ->
-                if (loginTarget == LoginTarget.MAIN_ACCOUNT) {
-                    tokenInput = capturedSpdc
-                    AppSettings.setSpotifySpdcToken(capturedSpdc)
-                } else {
-                    canvasTokenInput = capturedSpdc
-                    AppSettings.setSpotifyCanvasSpdcToken(capturedSpdc)
+        val target = loginTarget!!
+        BackHandler { loginTarget = null }
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { loginTarget = null }) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                    Text(
+                        text = if (target == LoginTarget.MAIN_ACCOUNT) "Sign in to Spotify" else "Sign in to Canvas Account",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
                 }
-                loginTarget = null
+
+                SpotifyLoginScreen(
+                    onCookiesCaptured = { capturedSpdc ->
+                        if (target == LoginTarget.MAIN_ACCOUNT) {
+                            tokenInput = capturedSpdc
+                            AppSettings.setSpotifySpdcToken(capturedSpdc)
+                        } else {
+                            canvasTokenInput = capturedSpdc
+                            AppSettings.setSpotifyCanvasSpdcToken(capturedSpdc)
+                        }
+                        loginTarget = null
+                    },
+                    modifier = Modifier.weight(1f)
+                )
             }
-        )
+        }
+        return
     }
 
     Scaffold(
@@ -221,94 +252,6 @@ fun SpotifyCanvasAuthScreen(
                 modifier = Modifier.fillMaxWidth().height(48.dp)
             ) {
                 Text("Save Configuration")
-            }
-        }
-    }
-}
-
-private enum class LoginTarget {
-    MAIN_ACCOUNT,
-    CANVAS_ACCOUNT,
-}
-
-@SuppressLint("SetJavaScriptEnabled")
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SpotifyLoginDialog(
-    target: LoginTarget,
-    onDismiss: () -> Unit,
-    onSuccess: (String) -> Unit,
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            Text(
-                                if (target == LoginTarget.MAIN_ACCOUNT) "Log in with Spotify"
-                                else "Log in with Canvas Account"
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(Icons.Rounded.Close, contentDescription = "Close")
-                            }
-                        }
-                    )
-                }
-            ) { padding ->
-                AndroidView(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                    factory = { context ->
-                        WebView(context).apply {
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-
-                            val cookieManager = CookieManager.getInstance()
-                            cookieManager.setAcceptCookie(true)
-                            cookieManager.setAcceptThirdPartyCookies(this, true)
-
-                            webViewClient = object : WebViewClient() {
-                                private fun extractSpdc() {
-                                    val cookieStr = cookieManager.getCookie("https://open.spotify.com").orEmpty() + "; " +
-                                        cookieManager.getCookie("https://spotify.com").orEmpty() + "; " +
-                                        cookieManager.getCookie("https://accounts.spotify.com").orEmpty()
-                                    val match = Regex("""sp_dc=([^;]+)""").find(cookieStr)?.groupValues?.get(1)?.trim()
-                                    if (!match.isNullOrBlank()) {
-                                        onSuccess(match)
-                                    }
-                                }
-
-                                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                    super.onPageStarted(view, url, favicon)
-                                    extractSpdc()
-                                }
-
-                                override fun onPageFinished(view: WebView?, url: String?) {
-                                    super.onPageFinished(view, url)
-                                    extractSpdc()
-                                }
-
-                                override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-                                    super.doUpdateVisitedHistory(view, url, isReload)
-                                    extractSpdc()
-                                }
-                            }
-
-                            loadUrl("https://accounts.spotify.com/en/login?continue=https%3A%2F%2Fopen.spotify.com%2F")
-                        }
-                    }
-                )
             }
         }
     }
