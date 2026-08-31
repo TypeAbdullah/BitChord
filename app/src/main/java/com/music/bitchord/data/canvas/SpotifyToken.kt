@@ -55,9 +55,16 @@ internal object SpotifyToken {
     @Volatile private var accessTokenExpiresAtMs = 0L
     @Volatile private var cachedClientId: String? = null
 
+    @Volatile private var cachedCanvasToken: String? = null
+    @Volatile private var canvasTokenExpiresAtMs = 0L
+    @Volatile private var cachedCanvasClientId: String? = null
+
     @Volatile private var cachedSession: SessionInfo? = null
     @Volatile private var cachedClientToken: String? = null
     @Volatile private var clientTokenExpiresAtMs = 0L
+
+    @Volatile private var cachedCanvasClientToken: String? = null
+    @Volatile private var canvasClientTokenExpiresAtMs = 0L
 
     private data class SessionInfo(val clientVersion: String, val deviceId: String)
     private data class HarvestedToken(val token: String, val expiresAt: Long, val clientId: String?)
@@ -67,26 +74,33 @@ internal object SpotifyToken {
     }
 
     /**
-     * The current bearer token, or null when there is no cookie to mint one
-     * from, [init] was never called, or the harvest failed. Cached until
-     * shortly before it expires so a skip through a queue doesn't pay for
-     * this per track.
-     *
-     * Minted by loading the real web player in an offscreen WebView with the
-     * listener's cookie applied and reading the token it mints for itself —
-     * see [harvestViaWebView] for why signing the request ourselves isn't
-     * enough.
+     * The current bearer token, minted from the session cookie.
+     * When [forCanvas] is true, uses [AppSettings.spotifyCanvasSpdcToken] (falling back to
+     * [AppSettings.spotifySpdcToken]), allowing a separate region cookie (e.g. India)
+     * dedicated for Canvas video fetching while keeping the main account for streaming.
      */
-    suspend fun accessToken(): String? {
-        val cookie = AppSettings.spotifySpdcToken.value
+    suspend fun accessToken(forCanvas: Boolean = false): String? {
+        val cookie = if (forCanvas) {
+            AppSettings.spotifyCanvasSpdcToken.value.ifBlank { AppSettings.spotifySpdcToken.value }
+        } else {
+            AppSettings.spotifySpdcToken.value.ifBlank { AppSettings.spotifyCanvasSpdcToken.value }
+        }
         if (cookie.isBlank()) return null
 
         val now = System.currentTimeMillis()
-        cachedAccessToken?.let { if (now < accessTokenExpiresAtMs - 30_000) return it }
+        if (forCanvas) {
+            cachedCanvasToken?.let { if (now < canvasTokenExpiresAtMs - 30_000) return it }
+        } else {
+            cachedAccessToken?.let { if (now < accessTokenExpiresAtMs - 30_000) return it }
+        }
 
         return harvestMutex.withLock {
             val stillNow = System.currentTimeMillis()
-            cachedAccessToken?.let { if (stillNow < accessTokenExpiresAtMs - 30_000) return@withLock it }
+            if (forCanvas) {
+                cachedCanvasToken?.let { if (stillNow < canvasTokenExpiresAtMs - 30_000) return@withLock it }
+            } else {
+                cachedAccessToken?.let { if (stillNow < accessTokenExpiresAtMs - 30_000) return@withLock it }
+            }
 
             val context = appContext
             if (context == null) {
@@ -96,14 +110,20 @@ internal object SpotifyToken {
 
             val harvested = withContext(Dispatchers.Main) { harvestViaWebView(context, cookie) }
             if (harvested == null) {
-                Log.w(TAG, "token harvest failed or timed out")
+                Log.w(TAG, "token harvest failed or timed out for ${if (forCanvas) "canvas" else "account"}")
                 return@withLock null
             }
 
-            cachedAccessToken = harvested.token
-            accessTokenExpiresAtMs = harvested.expiresAt
-            harvested.clientId?.let { cachedClientId = it }
-            Log.d(TAG, "harvested access token, good until ${java.util.Date(harvested.expiresAt)}")
+            if (forCanvas) {
+                cachedCanvasToken = harvested.token
+                canvasTokenExpiresAtMs = harvested.expiresAt
+                harvested.clientId?.let { cachedCanvasClientId = it }
+            } else {
+                cachedAccessToken = harvested.token
+                accessTokenExpiresAtMs = harvested.expiresAt
+                harvested.clientId?.let { cachedClientId = it }
+            }
+            Log.d(TAG, "harvested access token for ${if (forCanvas) "canvas" else "account"}, good until ${java.util.Date(harvested.expiresAt)}")
             harvested.token
         }
     }
@@ -253,11 +273,15 @@ internal object SpotifyToken {
      * succeeded once, since the client id it needs comes off that response.
      */
     @Synchronized
-    fun clientToken(): String? {
+    fun clientToken(forCanvas: Boolean = false): String? {
         val now = System.currentTimeMillis()
-        cachedClientToken?.let { if (now < clientTokenExpiresAtMs - 30_000) return it }
+        if (forCanvas) {
+            cachedCanvasClientToken?.let { if (now < canvasClientTokenExpiresAtMs - 30_000) return it }
+        } else {
+            cachedClientToken?.let { if (now < clientTokenExpiresAtMs - 30_000) return it }
+        }
 
-        val clientId = cachedClientId
+        val clientId = if (forCanvas) cachedCanvasClientId ?: cachedClientId else cachedClientId
         if (clientId == null) {
             Log.w(TAG, "no client id yet (access token not minted); skipping client token")
             return null
@@ -322,9 +346,14 @@ internal object SpotifyToken {
         val ttlSeconds = granted["expires_after_seconds"]?.jsonPrimitive?.contentOrNull
             ?.toLongOrNull() ?: 3600L
 
-        cachedClientToken = token
-        clientTokenExpiresAtMs = now + ttlSeconds * 1000
-        Log.d(TAG, "minted client token, good for ${ttlSeconds}s")
+        if (forCanvas) {
+            cachedCanvasClientToken = token
+            canvasClientTokenExpiresAtMs = now + ttlSeconds * 1000
+        } else {
+            cachedClientToken = token
+            clientTokenExpiresAtMs = now + ttlSeconds * 1000
+        }
+        Log.d(TAG, "minted client token for ${if (forCanvas) "canvas" else "account"}, good for ${ttlSeconds}s")
         return token
     }
 

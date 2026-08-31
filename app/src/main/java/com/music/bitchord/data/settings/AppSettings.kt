@@ -321,6 +321,7 @@ object AppSettings {
     val listenBrainzEnabled = MutableStateFlow(false)
     val listenBrainzToken = MutableStateFlow("")
     val spotifySpdcToken = MutableStateFlow("")
+    val spotifyCanvasSpdcToken = MutableStateFlow("")
     val homeProvider = MutableStateFlow(HomeProvider.YOUTUBE)
     val spotifyDeviceName = MutableStateFlow("BitChord")
     val spotifyCanvasFromCookie = MutableStateFlow(true)
@@ -491,6 +492,7 @@ object AppSettings {
         listenBrainzEnabled.value = prefs.getBoolean(KEY_LISTENBRAINZ_ENABLED, false)
         listenBrainzToken.value = prefs.getString(KEY_LISTENBRAINZ_TOKEN, "").orEmpty()
         spotifySpdcToken.value = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, "").orEmpty()
+        spotifyCanvasSpdcToken.value = prefs.getString(KEY_SPOTIFY_CANVAS_SPDC_TOKEN, "").orEmpty()
         homeProvider.value = runCatching {
             HomeProvider.valueOf(prefs.getString(KEY_HOME_PROVIDER, null) ?: "YOUTUBE")
         }.getOrDefault(HomeProvider.YOUTUBE)
@@ -825,6 +827,11 @@ object AppSettings {
         com.music.bitchord.playback.spotify.LibrespotManager.checkSession()
     }
 
+    fun setSpotifyCanvasSpdcToken(value: String) {
+        spotifyCanvasSpdcToken.value = value
+        prefs.edit().putString(KEY_SPOTIFY_CANVAS_SPDC_TOKEN, value).apply()
+    }
+
     fun setHomeProvider(value: HomeProvider) {
         homeProvider.value = value
         prefs.edit().putString(KEY_HOME_PROVIDER, value.name).apply()
@@ -1126,6 +1133,7 @@ object AppSettings {
     private const val KEY_LISTENBRAINZ_ENABLED = "listenbrainz_enabled"
     private const val KEY_LISTENBRAINZ_TOKEN = "listenbrainz_token"
     private const val KEY_SPOTIFY_SPDC_TOKEN = "spotify_spdc_token"
+    private const val KEY_SPOTIFY_CANVAS_SPDC_TOKEN = "spotify_canvas_spdc_token"
     private const val KEY_HOME_PROVIDER = "home_provider"
     private const val KEY_SPOTIFY_DEVICE_NAME = "spotify_device_name"
     private const val KEY_SPOTIFY_CANVAS_COOKIE = "spotify_canvas_cookie"

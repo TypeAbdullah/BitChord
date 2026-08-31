@@ -34,6 +34,8 @@ fun SpotifyCanvasAuthScreen(
 ) {
     val currentToken by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
     var tokenInput by remember(currentToken) { mutableStateOf(currentToken) }
+    val currentCanvasToken by AppSettings.spotifyCanvasSpdcToken.collectAsStateWithLifecycle()
+    var canvasTokenInput by remember(currentCanvasToken) { mutableStateOf(currentCanvasToken) }
     val currentDeviceName by AppSettings.spotifyDeviceName.collectAsStateWithLifecycle()
     var deviceNameInput by remember(currentDeviceName) { mutableStateOf(currentDeviceName) }
     val isConnected by com.music.bitchord.playback.spotify.LibrespotManager.isConnected.collectAsStateWithLifecycle()
@@ -77,7 +79,18 @@ fun SpotifyCanvasAuthScreen(
             OutlinedTextField(
                 value = tokenInput,
                 onValueChange = { tokenInput = it },
-                label = { Text("sp_dc token") },
+                label = { Text("Account sp_dc token (Main / Premium / Family)") },
+                placeholder = { Text("e.g. Bangladesh Premium Account") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = canvasTokenInput,
+                onValueChange = { canvasTokenInput = it },
+                label = { Text("Canvas sp_dc token (Optional / Indian Account)") },
+                placeholder = { Text("Leave empty to use main account sp_dc") },
+                supportingText = { Text("Use a separate account cookie (e.g. India) if your main region lacks Canvas.") },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 singleLine = true
             )
@@ -138,6 +151,7 @@ fun SpotifyCanvasAuthScreen(
             Button(
                 onClick = { 
                     AppSettings.setSpotifySpdcToken(tokenInput.trim())
+                    AppSettings.setSpotifyCanvasSpdcToken(canvasTokenInput.trim())
                     AppSettings.setSpotifyDeviceName(deviceNameInput.trim())
                     onNavigateUp()
                 },

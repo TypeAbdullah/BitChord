@@ -61,7 +61,7 @@ object SpotifyCanvas {
     private data class TrackHit(val uri: String, val title: String, val artist: String, val album: String?)
 
     suspend fun search(title: String, artist: String, album: String?): CanvasArtwork? {
-        val token = SpotifyToken.accessToken()
+        val token = SpotifyToken.accessToken(forCanvas = true)
         if (token == null) {
             Log.d(TAG, "no access token (cookie unset or mint failed); skipping")
             return null
@@ -106,7 +106,7 @@ object SpotifyCanvas {
      * than re-checking it.
      */
     private fun searchViaPathfinder(title: String, artist: String, album: String?, token: String): TrackHit? {
-        val clientToken = SpotifyToken.clientToken()
+        val clientToken = SpotifyToken.clientToken(forCanvas = true)
         if (clientToken == null) {
             Log.d(TAG, "no client token; skipping pathfinder search")
             return null
@@ -213,7 +213,7 @@ object SpotifyCanvas {
      * lookup to make directly.
      */
     suspend fun searchAlbum(album: String, artist: String): CanvasArtwork? {
-        val token = SpotifyToken.accessToken() ?: return null
+        val token = SpotifyToken.accessToken(forCanvas = true) ?: return null
         val url = SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("q", "$album $artist")
             .addQueryParameter("type", "album")
@@ -270,7 +270,7 @@ object SpotifyCanvas {
      */
     private fun authHeaders(token: String): Map<String, String> {
         val headers = mutableMapOf("Authorization" to "Bearer $token", "User-Agent" to CANVAS_UA)
-        SpotifyToken.clientToken()?.let { headers["Client-Token"] = it }
+        SpotifyToken.clientToken(forCanvas = true)?.let { headers["Client-Token"] = it }
         return headers
     }
 
