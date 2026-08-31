@@ -760,6 +760,8 @@ private fun PlaylistSortBar(
         }
     }
 }
+
+@Composable
 private fun DetailSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
