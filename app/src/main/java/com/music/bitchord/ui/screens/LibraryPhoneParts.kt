@@ -42,7 +42,7 @@ fun libraryLinks(): List<LibraryLink> {
     val smbHost by AppSettings.smbHost.collectAsStateWithLifecycle()
     val smbShare by AppSettings.smbShare.collectAsStateWithLifecycle()
     val showCacheFolder by AppSettings.showCacheFolder.collectAsStateWithLifecycle()
-    val spotifyConnected by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
+    val spotifyConnected by AppSettings.spotifyLibrarySpdcToken.collectAsStateWithLifecycle()
     fun link(icon: ImageVector, title: String, subtitle: String, browseId: String) = LibraryLink(
         item = ShelfItem(
             title = title,

@@ -170,6 +170,7 @@ import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.ui.screens.SpotifyCanvasAuthScreen
 import com.music.bitchord.ui.screens.SpotifyLibraryScreen
 import com.music.bitchord.data.spotify.SPOTIFY_PAGE_PREFIX
+import com.music.bitchord.data.spotify.SpotifyImporter
 import com.music.bitchord.playback.AudioCache
 import com.music.bitchord.playback.LinkRequest
 import com.music.bitchord.playback.MusicLink
@@ -2694,6 +2695,16 @@ private fun BitChordApp(
                                     thumbnailUrl = playlist.imageUrl,
                                     type = BrowseType.PLAYLIST,
                                 )
+                            },
+                            onPlayTrack = { track ->
+                                scope.launch {
+                                    val song = runCatching { SpotifyImporter.matchTrack(track) }.getOrNull()
+                                    if (song != null) {
+                                        playRadio(song, QueueSource(searchLabel, PlaybackSourceType.SEARCH))
+                                    } else {
+                                        Toast.makeText(context, R.string.spotify_track_unavailable, Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             },
                             contentPadding = listPadding,
                         )

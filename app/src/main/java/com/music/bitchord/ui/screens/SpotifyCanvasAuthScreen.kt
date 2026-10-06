@@ -38,7 +38,7 @@ import com.music.bitchord.R
 fun SpotifyCanvasAuthScreen(
     onNavigateUp: () -> Unit
 ) {
-    val currentToken by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
+    val currentToken by AppSettings.spotifyCanvasSpdcToken.collectAsStateWithLifecycle()
     val autoHidePlayer by AppSettings.spotifyCanvasAutoHide.collectAsStateWithLifecycle()
     val prioritizeSpotify by AppSettings.prioritizeSpotifyCanvas.collectAsStateWithLifecycle()
     var tokenInput by remember(currentToken) { mutableStateOf(currentToken) }
@@ -101,7 +101,7 @@ fun SpotifyCanvasAuthScreen(
 
             Button(
                 onClick = { 
-                    AppSettings.setSpotifySpdcToken(tokenInput.trim())
+                    AppSettings.setSpotifyCanvasSpdcToken(tokenInput.trim())
                     onNavigateUp()
                 },
                 modifier = Modifier.fillMaxWidth()

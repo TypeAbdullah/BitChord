@@ -36,12 +36,14 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,14 +88,18 @@ private const val LOGIN_LAYOUT_FIX = """
 @Composable
 fun SpotifyLibraryScreen(
     onOpenPlaylist: (SpotifyPlaylist) -> Unit,
+    onPlayTrack: (SpotifyTrack) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
-    val cookie by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
+    val cookie by AppSettings.spotifyLibrarySpdcToken.collectAsStateWithLifecycle()
     var showLogin by remember { mutableStateOf(false) }
     var playlists by remember { mutableStateOf<List<SpotifyPlaylist>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<SpotifyTrack>>(emptyList()) }
+    var searchLoading by remember { mutableStateOf(false) }
 
     BackHandler(enabled = showLogin) { showLogin = false }
 
@@ -111,11 +117,26 @@ fun SpotifyLibraryScreen(
         loading = false
     }
 
+    LaunchedEffect(cookie, searchQuery) {
+        val query = searchQuery.trim()
+        if (cookie.isBlank() || query.isBlank()) {
+            searchResults = emptyList()
+            searchLoading = false
+            return@LaunchedEffect
+        }
+        delay(350)
+        searchLoading = true
+        runCatching { SpotifyLibrary.searchTracks(query) }
+            .onSuccess { searchResults = it }
+            .onFailure { error = it.message }
+        searchLoading = false
+    }
+
     if (showLogin) {
         SpotifyLogin(
             modifier = modifier.padding(contentPadding),
             onConnected = { token ->
-                AppSettings.setSpotifySpdcToken(token)
+                AppSettings.setSpotifyLibrarySpdcToken(token)
                 showLogin = false
             },
         )
@@ -160,6 +181,15 @@ fun SpotifyLibraryScreen(
                 }
             }
         } else {
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Search Spotify") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                )
+            }
             if (loading) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -176,13 +206,32 @@ fun SpotifyLibraryScreen(
                     )
                 }
             }
-            items(playlists, key = { it.id }) { item ->
-                LibraryRow(
-                    title = item.name,
-                    subtitle = item.owner.orEmpty(),
-                    imageUrl = item.imageUrl,
-                    onClick = { onOpenPlaylist(item) },
-                )
+            if (searchLoading) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(Modifier.size(24.dp))
+                    }
+                }
+            }
+            val shownTracks = searchResults.takeIf { searchQuery.isNotBlank() }.orEmpty()
+            if (shownTracks.isNotEmpty()) {
+                items(shownTracks, key = { "track-${it.id}" }) { track ->
+                    LibraryRow(
+                        title = track.title,
+                        subtitle = listOf("Song", track.artist, track.album).filterNotNull().joinToString(" - "),
+                        imageUrl = track.imageUrl,
+                        onClick = { onPlayTrack(track) },
+                    )
+                }
+            } else if (!searchLoading && searchQuery.isBlank()) {
+                items(playlists, key = { it.id }) { item ->
+                    LibraryRow(
+                        title = item.name,
+                        subtitle = item.owner.orEmpty(),
+                        imageUrl = item.imageUrl,
+                        onClick = { onOpenPlaylist(item) },
+                    )
+                }
             }
         }
     }

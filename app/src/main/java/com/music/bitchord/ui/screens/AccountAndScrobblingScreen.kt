@@ -66,7 +66,7 @@ fun AccountAndScrobblingScreen(
     val discordToken by AppSettings.discordToken.collectAsStateWithLifecycle()
     val discordUsername by AppSettings.discordUsername.collectAsStateWithLifecycle()
     val discordRpcEnabled by AppSettings.discordRpcEnabled.collectAsStateWithLifecycle()
-    val spotifyConnected by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
+    val spotifyConnected by AppSettings.spotifyLibrarySpdcToken.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier
@@ -125,7 +125,7 @@ fun AccountAndScrobblingScreen(
                     label = stringResource(R.string.spotify_disconnect),
                     onClick = {
                         clearSpotifyWebSession()
-                        AppSettings.setSpotifySpdcToken("")
+                        AppSettings.setSpotifyLibrarySpdcToken("")
                     },
                 )
             }

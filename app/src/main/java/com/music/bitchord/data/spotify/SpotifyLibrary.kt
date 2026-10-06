@@ -3,6 +3,7 @@ package com.music.bitchord.data.spotify
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.canvas.CANVAS_UA
 import com.music.bitchord.data.canvas.SpotifyToken
+import com.music.bitchord.data.settings.AppSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -22,6 +23,7 @@ import kotlinx.serialization.json.putJsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /** A Spotify playlist's page id in the detail stack: this plus the playlist id (or [SpotifyLibrary.LIKED_ID]). */
 const val SPOTIFY_PAGE_PREFIX = "spotify:playlist:"
@@ -148,6 +150,39 @@ object SpotifyLibrary {
         largestSource(root.obj("data")?.obj("playlistV2")?.obj("images"))
     }
 
+    /** Spotify catalogue metadata; callers still resolve playback on YouTube Music. */
+    suspend fun searchTracks(query: String): List<SpotifyTrack> = withContext(Dispatchers.IO) {
+        if (query.isBlank()) return@withContext emptyList()
+        val url = "https://api.spotify.com/v1/search".toHttpUrl().newBuilder()
+            .addQueryParameter("q", query)
+            .addQueryParameter("type", "track")
+            .addQueryParameter("limit", "30")
+            .build()
+        val request = Request.Builder().url(url).apply {
+            authHeaders().forEach { (name, value) -> header(name, value) }
+        }.build()
+        val payload = Http.client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IllegalStateException("Spotify search failed (${response.code})")
+            response.body?.string().orEmpty()
+        }
+        val items = json.parseToJsonElement(payload).jsonObject.obj("tracks")?.arr("items").orEmpty()
+        items.mapNotNull { item ->
+            val data = item.jsonObject
+            val id = data.str("id") ?: return@mapNotNull null
+            val title = data.str("name")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val album = data.obj("album")
+            SpotifyTrack(
+                id = id,
+                title = title,
+                artist = data.arr("artists").orEmpty().mapNotNull { it.jsonObject.str("name") }
+                    .joinToString(", "),
+                album = album?.str("name"),
+                durationMs = data.int("duration_ms") ?: 0,
+                imageUrl = album?.arr("images")?.firstOrNull()?.jsonObject?.str("url"),
+            )
+        }
+    }
+
     private fun likedPage(headers: Map<String, String>, offset: Int): Triple<List<SpotifyTrack>, Int, Int> {
         val variables = buildJsonObject {
             put("offset", offset)
@@ -157,7 +192,7 @@ object SpotifyLibrary {
     }
 
     private suspend fun authHeaders(): Map<String, String> {
-        val token = SpotifyToken.accessToken()
+        val token = SpotifyToken.accessToken(AppSettings.spotifyLibrarySpdcToken.value)
             ?: throw IllegalStateException("Spotify sign-in expired")
         return buildMap {
             put("Authorization", "Bearer $token")

@@ -31,7 +31,7 @@ import java.util.Base64
 
 /**
  * The bearer token behind Spotify's own web player, minted from the
- * listener's session cookie ([AppSettings.spotifySpdcToken]) rather than an
+ * Canvas session cookie ([AppSettings.spotifyCanvasSpdcToken]) rather than an
  * app credential — there is no public API for a track's Canvas, so this walks
  * the same door the web player itself uses to fetch one.
  *
@@ -53,6 +53,7 @@ internal object SpotifyToken {
 
     @Volatile private var cachedAccessToken: String? = null
     @Volatile private var accessTokenExpiresAtMs = 0L
+    @Volatile private var cachedCookie: String? = null
     @Volatile private var cachedClientId: String? = null
 
     @Volatile private var cachedSession: SessionInfo? = null
@@ -69,6 +70,7 @@ internal object SpotifyToken {
     fun invalidate() {
         cachedAccessToken = null
         accessTokenExpiresAtMs = 0L
+        cachedCookie = null
         cachedClientId = null
         cachedClientToken = null
         clientTokenExpiresAtMs = 0L
@@ -85,16 +87,19 @@ internal object SpotifyToken {
      * see [harvestViaWebView] for why signing the request ourselves isn't
      * enough.
      */
-    suspend fun accessToken(): String? {
-        val cookie = AppSettings.spotifySpdcToken.value
+    suspend fun accessToken(cookie: String = AppSettings.spotifyCanvasSpdcToken.value): String? {
         if (cookie.isBlank()) return null
 
         val now = System.currentTimeMillis()
-        cachedAccessToken?.let { if (now < accessTokenExpiresAtMs - 30_000) return it }
+        cachedAccessToken?.let {
+            if (cachedCookie == cookie && now < accessTokenExpiresAtMs - 30_000) return it
+        }
 
         return harvestMutex.withLock {
             val stillNow = System.currentTimeMillis()
-            cachedAccessToken?.let { if (stillNow < accessTokenExpiresAtMs - 30_000) return@withLock it }
+            cachedAccessToken?.let {
+                if (cachedCookie == cookie && stillNow < accessTokenExpiresAtMs - 30_000) return@withLock it
+            }
 
             val context = appContext
             if (context == null) {
@@ -110,6 +115,7 @@ internal object SpotifyToken {
 
             cachedAccessToken = harvested.token
             accessTokenExpiresAtMs = harvested.expiresAt
+            cachedCookie = cookie
             harvested.clientId?.let { cachedClientId = it }
             Log.d(TAG, "harvested access token, good until ${java.util.Date(harvested.expiresAt)}")
             harvested.token
@@ -134,7 +140,13 @@ internal object SpotifyToken {
     private suspend fun harvestViaWebView(context: Context, cookie: String): HarvestedToken? {
         val deferred = CompletableDeferred<HarvestedToken?>()
 
-        val cookieManager = CookieManager.getInstance().apply {
+        val cookieManager = CookieManager.getInstance()
+        // Canvas must never take over the WebView session used by the library
+        // sign-in. Save it before the off-screen player is given the Canvas
+        // cookie, then put it back when this short token harvest is done.
+        val savedOpenCookies = cookieManager.getCookie("https://open.spotify.com/")
+        val savedAccountsCookies = cookieManager.getCookie("https://accounts.spotify.com/")
+        cookieManager.apply {
             setAcceptCookie(true)
             setCookie("https://open.spotify.com/", "sp_dc=$cookie; Domain=.spotify.com; Path=/; Secure")
             setCookie("https://accounts.spotify.com/", "sp_dc=$cookie; Domain=.spotify.com; Path=/; Secure")
@@ -181,6 +193,18 @@ internal object SpotifyToken {
                 webView?.stopLoading()
                 webView?.destroy()
             }
+            restoreCookies(cookieManager, "https://open.spotify.com/", savedOpenCookies)
+            restoreCookies(cookieManager, "https://accounts.spotify.com/", savedAccountsCookies)
+            cookieManager.flush()
+        }
+    }
+
+    private fun restoreCookies(cookieManager: CookieManager, url: String, cookies: String?) {
+        // Remove the temporary Canvas cookie first. Replaying the original
+        // cookie header restores both a signed-in and signed-out session.
+        cookieManager.setCookie(url, "sp_dc=; Max-Age=0; Path=/; Domain=.spotify.com; Secure")
+        cookies?.split(";")?.map(String::trim)?.filter(String::isNotEmpty)?.forEach { cookie ->
+            cookieManager.setCookie(url, cookie)
         }
     }
 
