@@ -2998,6 +2998,7 @@ private fun BitChordApp(
                             currentSong = player.song,
                             isPlaying = player.isPlaying,
                             title = stringResource(R.string.listen_now),
+                            onSpotifyMode = { showSpotify = true },
                             signedIn = signedIn,
                             onSignIn = { webSession = WebSessionMode.SIGN_IN },
                             onItemClick = { item, shelfTitle ->

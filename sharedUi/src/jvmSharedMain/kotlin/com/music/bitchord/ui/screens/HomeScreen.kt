@@ -37,6 +37,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
@@ -117,6 +118,7 @@ fun HomeScreen(
     contentPadding: PaddingValues,
     /** The page's heading, or null for none — the desktop's pages carry no heading. */
     title: String?,
+    onSpotifyMode: (() -> Unit)? = null,
     signedIn: Boolean = true,
     onSignIn: (() -> Unit)? = null,
     /**
@@ -162,7 +164,7 @@ fun HomeScreen(
             },
         ) {
             if (title != null) {
-                item { HomeTitle(title) }
+                item { HomeTitle(title, onSpotifyMode = onSpotifyMode) }
             }
             if (!signedIn && onSignIn != null) {
                 item {
@@ -492,7 +494,11 @@ fun CompactTrackRow(
  * system font scale.
  */
 @Composable
-private fun HomeTitle(title: String, modifier: Modifier = Modifier) {
+private fun HomeTitle(
+    title: String,
+    modifier: Modifier = Modifier,
+    onSpotifyMode: (() -> Unit)? = null,
+) {
     val style = MaterialTheme.typography.displayLarge
     val logoHeight = with(LocalDensity.current) { (style.fontSize * LOGO_TO_FONT).toDp() }
     Column(modifier = modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp)) {
@@ -510,6 +516,24 @@ private fun HomeTitle(title: String, modifier: Modifier = Modifier) {
             style = style,
             color = MaterialTheme.colorScheme.onBackground,
         )
+        if (onSpotifyMode != null) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                TextButton(onClick = {}) { Text("YouTube Music") }
+                TextButton(onClick = onSpotifyMode) {
+                    Icon(
+                        painter = painterResource(Res.drawable.spotify_logo),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text("Spotify")
+                }
+            }
+        }
     }
 }
 
